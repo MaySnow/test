@@ -12,9 +12,7 @@ module.exports = {
     assetsPublicPath: '/',
     proxyTable: {
       '/dispatching-executor/**': {
-        // target: 'http://127.0.0.1:8083',
-        // target: 'http://10.10.204.90:8180',
-        target: 'http://10.10.204.90:8180',
+        target: 'http://127.0.0.1:8083',
         changeOrigin: true,
         logLevel: 'debug',
         pathRewrite: {
