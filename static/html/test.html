@@ -1,0 +1,450 @@
+<!doctype html>
+
+<meta charset="utf-8">
+<title>Dagre D3 Demo: Clusters</title>
+
+<link rel="stylesheet" href="demo.css">
+<script src="https://d3js.org/d3.v4.min.js" charset="utf-8"></script>
+<script src="/static/js/lib/dagre-d3.min.js"></script>
+<script src="/static/js/lib/jquery-3.3.1.min.js"></script>
+
+<h1>Dagre D3 Demo: Clusters</h1>
+
+<style>
+  #svg-canvas-wrap {
+    margin: 0 auto;
+    border: 1px solid #cccccc
+  }
+  .clusters rect {
+    fill: #00ffd0;
+    stroke: #999;
+    stroke-width: 1.5px;
+  }
+
+  text {
+    font-weight: 300;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+    font-size: 14px;
+  }
+
+  .svg-contextmenu {
+    /* display: none */
+  }
+
+  .node {
+    position: relative
+  }
+  .node rect {
+    stroke: #999;
+    fill: #fff;
+    stroke-width: 1.5px;
+  }
+  .node .node-index {
+    color:green;
+    font-weight:bold;
+    font-size:16px;
+  }
+
+  .node .node-contextmenu {
+    position: absolute;
+    top: -23px;
+    z-index: 999;
+  }
+
+  .node.node-cur,.node.node-cur .node-index {
+    color: #fff;
+  }
+  .node.node-cur rect {
+    stroke:red;
+    fill: red;
+  }
+  
+
+  .edgePath path {
+    stroke: #333;
+    stroke-width: 1.5px;
+  }
+
+  input[type="button"] {
+    border-color: red;
+    color: red;
+    width: 50px;
+  }
+  .temp {
+    display: inline-block;
+    width: 50px;
+  }
+  .edgePath.path_cur path{
+    stroke: red;
+    stroke-width: 3px;
+  }
+
+  #svg-contextmenu {
+    display: none
+  }
+  #svg-contextmenu.menu-show {
+    display: block
+  }
+
+  .node-content {
+    -webkit-touch-callout: none; /* iOS Safari */
+    -webkit-user-select: none;   /* Chrome 6.0+, Safari 3.1+, Edge & Opera 15+ */
+    -moz-user-select: none;      /* Firefox */
+    -ms-user-select: none;       /* IE 10+ and Edge */
+    user-select: none;           /* Non-prefixed version, 
+                    currently supported by Chrome and Opera */
+  }
+
+</style>
+
+<div style="margin-bottom: 10px">
+    batchId: <input id="batchId" type="text" value=""> <input type="button" value="确定" id="batchIdBtn">
+</div>
+
+<svg id="svg-canvas-wrap" width=960 height=900></svg>
+
+<section>
+  <p>An example of visualizing clusters. This example shows how clusters can be applied to a rendered graph.
+</section>
+
+<script id="js">
+
+
+  var nodeMap = {}
+
+  let ID_PREFIX = 'node_'
+
+  $("#batchIdBtn").on("click",function(){
+    if($('#batchId').val()) {
+      nodeMap = {}
+      init(1)
+      
+    }
+  })
+
+  //end_hjzx_sda 根  end_hjzx_sa
+  init(1)
+
+function init(oldId,resData,oldTransform,oldNode,type) {
+  if(!resData) {
+    resData = {
+      id: oldId
+    }
+  }
+  console.log(type)
+  let data = JSON.parse(JSON.stringify(resData))
+  if(type === 'prev') {
+    nodeMap[oldId].prev = data.prev
+  } else if(type === 'in') {
+    nodeMap[oldId].in = data.in
+  } else {
+    //测试才用到
+    nodeMap[oldId] = data
+  }
+
+  console.log(nodeMap)
+
+
+
+  var svgPrev = d3.select("svg > g");
+  svgPrev.selectAll("*").remove();
+  var oldZoom= d3.zoom().on("zoom", null)
+
+  if(oldTransform) {
+    svgPrev.attr('transform','translate(0,0) scale(1)')
+  }
+
+    // Create the input graph
+    var g = new dagreD3.graphlib.Graph({ compound: true })
+      .setGraph({})
+      .setDefaultEdgeLabel(function () { return {}; });
+
+    var curNodeMap = {}
+    var nodeArr = []
+
+    for(let key in nodeMap) {
+        var curData = nodeMap[key]
+        curNodeMap[key] = curData
+        //主节点，需要加载子和父的关系edge
+        curNodeMap[key].isMain = true
+        //子
+        if(curData.in) {
+          curData.in.forEach(function(item) {
+            if(!nodeMap[item.id]) {
+              nodeMap[item.id] = item
+            }
+            curNodeMap[item.id] = item
+          })
+          
+        }
+        //父 上级渲染有问题
+        if(curData.prev) {
+          curData.prev.forEach(function(item){
+            if(!nodeMap[item.id]) {
+              nodeMap[item.id] = item
+            }
+            curNodeMap[item.id] = item
+          })
+        }
+
+    }
+    
+    for(let key in curNodeMap) {
+      nodeArr.push(curNodeMap[key])
+    }
+    
+    //根据id降序排列
+    nodeArr.sort(function(a,b){
+      return a.id - b.id
+    }) 
+
+
+    //先加载node保证node的加载顺序，    再设置依赖
+    nodeArr.forEach(function(curData) {
+      g.setNode(curData.id, {
+          labelType: 'html',
+          label: '<p class="node-content">'+ curData.id + (curData.status || curData.status === 0 ? '状态:' + curData.status : '') + '</p>',
+          id: ID_PREFIX + curData.id,
+          class: curData.id === oldId ? 'node-cur' : ''
+        });
+    })
+
+    g.setNode('svg-contextmenu',{
+      labelType: 'html',
+      label: `
+        <ul>
+            <li>
+              <a href="javascript:;" id="svg-contextmenu-prev">上级</a>
+            </li>  
+            <li>
+              <a href="javascript:;" id="svg-contextmenu-next">下级</a>
+            </li>
+          </ul>
+      `,
+      id: "svg-contextmenu"
+    })
+
+
+
+    for(let key in nodeMap) {
+        var curData = nodeMap[key]
+        //子
+        if(curData.in) {
+          createEdge(curData.in,curData.id,'in')
+        }
+        //父
+        if(curData.prev) {
+          createEdge(curData.prev,curData.id,'prev')
+        }
+
+    }
+
+    function createEdge(arr,id,type) {
+      arr.forEach(function(item){
+          
+            if(type === 'in') {
+              g.setEdge(id, item.id, {
+                class: 'path_' + id,
+                curve: d3.curveBasis
+              });
+            } else {
+              g.setEdge(item.id, id, {
+                class: 'path_' + item.id,
+                curve: d3.curveBasis
+              });
+            }
+            
+          })
+    }
+    
+    g.nodes().forEach(function (v) {
+      var node = g.node(v);
+      // Round the corners of the nodes
+      node.rx = node.ry = 5;
+    });
+
+
+    // Create the renderer
+    var render = new dagreD3.render();
+
+    // Set up an SVG group so that we can translate the final graph.
+    var svg = d3.select("svg");
+    svg.append("g").attr("class", "svg-canvas");
+
+    // Run the renderer. This is what draws the final graph.
+    render(d3.select(".svg-canvas"), g);
+    
+
+
+    var inner = d3.select("svg g");
+    var zoom = d3.zoom().on("zoom", function () {
+      inner.attr("transform", d3.event.transform);
+    });
+
+
+    if(oldTransform) {
+      let oldTransforms = oldTransform.split(' ')
+      let wrapPos = getTranslate(oldTransforms[0])
+      let oldScale = getScale(oldTransforms[1])
+      let oldPos = getTranslate(oldNode)
+      let newPos = getTranslate(d3.select('#' + ID_PREFIX + oldId).attr('transform'))
+      let newTrans = {
+        x: wrapPos.x -(newPos.x - oldPos.x) * oldScale,
+        y: wrapPos.y -(newPos.y - oldPos.y) * oldScale
+      }
+      svg.call(zoom).call(zoom.transform, d3.zoomIdentity.translate(newTrans.x,newTrans.y).scale(oldScale))
+    } else {
+      var transObj = {
+        x: 0,
+        y: 0
+      }
+      var initPos = document.getElementById(ID_PREFIX + data.id).getAttribute('transform')
+      var posPart = /translate\(\s*([^\s,)]+)[ ,]([^\s,)]+)/.exec(initPos)
+      transObj.x = -1 * posPart[1] + (900 / 2)
+      transObj.y = -1 * posPart[2] + 200
+
+       //第一次渲染
+       svg.call(zoom).call(zoom.transform, d3.zoomIdentity.translate(transObj.x,transObj.y))
+    }
+
+
+    //给每一个节点添加点击事件
+    for(let key in nodeMap) {
+        var curData = nodeMap[key]
+        addClickEvent(curData)
+        if(curData.in) {
+          curData.in.forEach(function(item){
+            addClickEvent(item)
+          })
+        }
+
+        if(curData.prev) {
+          curData.prev.forEach(function(item){
+            addClickEvent(item)
+          })
+        }
+    }
+
+    var selectedItem
+    //meau菜单的事件
+    //右键click事件，阻止冒泡
+    document.getElementById('svg-contextmenu').onclick = function(e) {
+      e.stopPropagation();
+    }
+    //点击非右键的meau时，隐藏meau
+    document.body.onclick = function() {
+      if(d3.select('#svg-contextmenu')) {
+        d3.select('#svg-contextmenu').classed('menu-show',false)
+      }
+    }
+
+    document.getElementById('svg-contextmenu-prev').onclick = function() {
+      let selectId = selectedItem.id
+      getData(selectId,1)      
+    }
+
+    document.getElementById('svg-contextmenu-next').onclick = function() {
+      let selectId = selectedItem.id
+      getData(selectId,2)
+      
+    }
+
+    function getData(selectId,type) {
+      let data = { 
+          jobId: selectId, 
+          type: type
+        }
+
+      if($('#batchId').val()) {
+        data.batchId = $('#batchId').val()
+      }
+      $.ajax({
+        method: "POST",
+        url: "/dispatching-executor/job/relation",
+        data: data
+      })
+        .done(function( res ) {
+          if(res.code === 1) {
+            init(selectId,res.data,inner.attr('transform'),d3.select('#' + ID_PREFIX + selectId).attr('transform'), type === 1 ? 'prev' : 'in')
+          } else {
+            alert('请求失败：' + JSON.stringify(res))
+          }
+          
+        });
+    }
+
+
+    function addClickEvent(item) {
+     
+      var curEle = document.getElementById(ID_PREFIX + item.id)
+          curEle.onclick = function (e) {
+                //addNodeClick.call(this, e,item,inner.attr('transform'))
+              }
+
+          curEle.addEventListener('contextmenu', function(ev) {
+            ev.preventDefault();
+            addNodeClick.call(this, ev,item,inner.attr('transform'))
+            return false;
+          }, false);
+
+          curEle.onmouseover = function(e) {
+            nodeHover.call(this, e,item)
+          }
+          curEle.onmouseleave = function(e) {
+            nodeLeave.call(this, e,item)
+          }
+    }
+    
+    function addNodeClick(e,item,curTransform) {
+      let curELe = d3.select('#' + ID_PREFIX + item.id)
+      let selectTrans = curELe.attr('transform')
+
+      let curWidth = Number(d3.select('#' + ID_PREFIX + item.id + ' rect').style('width').replace('px',''))
+      let meauWidth = Number(d3.select('#svg-contextmenu rect').style('width').replace('px',''))
+      let ops = getTranslate(selectTrans)
+      selectedItem = item
+
+      d3.select('#svg-contextmenu').attr('transform',`translate(${ops.x + (curWidth - meauWidth)/2 + meauWidth},${ops.y})`).classed('menu-show',true)
+    
+    }
+
+    function nodeHover(e,item) {
+      if(document.getElementsByClassName('path_' + item).length) {
+        var curEle = d3.selectAll('.path_' + item)
+        if(curEle) {
+          if(curEle.attr("class").indexOf('path_cur') === -1) {
+            curEle.attr("class", curEle.attr("class") + ' path_cur')
+          }
+        }
+      }
+    }
+
+    function nodeLeave(e,item) {
+      if(document.getElementsByClassName('path_' + item).length) {
+        var curEle = d3.selectAll('.path_' + item)
+        if(curEle) {
+          if(curEle.attr("class").indexOf('path_cur') !== -1) {
+            curEle.attr("class", curEle.attr("class").replace(' path_cur',''))
+          }
+        }
+      }
+    }
+
+    function getTranslate(translate) {
+      var posPart = /translate\(\s*([^\s,)]+)[ ,]([^\s,)]+)/.exec(translate)
+        return {
+          x: Number(posPart[1]),
+          y: Number(posPart[2])
+        }
+    }
+    function getScale(scale) {
+      let resScale = Number(scale.match(/\(([\d\.]+)\)/)[1])
+      return resScale ? resScale : 1
+    }
+  
+  }
+
+
+  
+
+</script>
